@@ -1,0 +1,110 @@
+@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ps-tangerine: #f97316;
+  --ps-tangerine-deep: #ea580c;
+  --ps-mint: #10b981;
+  --ps-mint-soft: #d1fae5;
+  --ps-cream: #fff7ed;
+  --ps-ink: #0f172a;
+}
+
+body {
+  margin: 0;
+  font-family: "Nunito", ui-sans-serif, system-ui, sans-serif;
+  color: var(--ps-ink);
+  background: #fff7ed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .font-display {
+  font-family: "Fredoka", "Nunito", ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+code, .font-mono {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+
+@layer base {
+  :root {
+    --background: 33 100% 96%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 22 92% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 152 76% 44%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 33 100% 94%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 152 76% 90%;
+    --accent-foreground: 152 76% 20%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 24 90% 92%;
+    --input: 24 90% 92%;
+    --ring: 22 92% 52%;
+    --chart-1: 22 92% 52%;
+    --chart-2: 152 76% 44%;
+    --chart-3: 46 96% 55%;
+    --chart-4: 199 89% 48%;
+    --chart-5: 340 82% 63%;
+    --radius: 1rem;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; }
+}
+
+.grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+.blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(60px);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes floaty {
+  0%, 100% { transform: translateY(0px) rotate(-1deg); }
+  50% { transform: translateY(-10px) rotate(1deg); }
+}
+.floaty { animation: floaty 6s ease-in-out infinite; }
+
+@keyframes pop-in {
+  0% { opacity: 0; transform: translateY(8px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.pop-in { animation: pop-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+.stagger > * { animation: pop-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.stagger > *:nth-child(1) { animation-delay: 0.03s; }
+.stagger > *:nth-child(2) { animation-delay: 0.09s; }
+.stagger > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger > *:nth-child(4) { animation-delay: 0.21s; }
+.stagger > *:nth-child(5) { animation-delay: 0.27s; }
+.stagger > *:nth-child(6) { animation-delay: 0.33s; }
+.stagger > *:nth-child(7) { animation-delay: 0.39s; }
+.stagger > *:nth-child(8) { animation-delay: 0.45s; }
+
+::selection { background: #fdba74; color: #431407; }

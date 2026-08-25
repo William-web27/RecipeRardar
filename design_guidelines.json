@@ -1,0 +1,115 @@
+{
+  "theme": {
+    "primary_archetype": "Vibrant Play / Organic & Earthy Hybrid",
+    "description": "A highly readable, playful, and tactile aesthetic focusing on the 'food and nutrition' theme. Avoids generic SaaS looks by leaning into organic shapes, bouncy typography, and warm, appetite-inducing colors.",
+    "mode": "light_theme_preferred"
+  },
+  "typography": {
+    "instructions": "Use Fredoka for all headings to establish a friendly, bouncy, playful vibe. Use Nunito for body text for supreme readability while maintaining soft, rounded characteristics. Ensure these fonts are imported from Google Fonts in index.css.",
+    "fonts": {
+      "headings": "Fredoka",
+      "body": "Nunito",
+      "mono": "JetBrains Mono"
+    },
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-none font-semibold",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-semibold",
+      "h3": "text-xl sm:text-2xl font-medium",
+      "body": "text-base leading-relaxed",
+      "labels": "text-xs tracking-[0.15em] uppercase font-bold"
+    }
+  },
+  "colors": {
+    "backgrounds": {
+      "page": "bg-orange-50/40",
+      "card": "bg-white",
+      "glass": "bg-white/70 backdrop-blur-xl"
+    },
+    "text": {
+      "primary": "text-slate-900",
+      "secondary": "text-slate-600",
+      "accent": "text-orange-600"
+    },
+    "accents": {
+      "primary": "bg-orange-500 hover:bg-orange-600 text-white",
+      "secondary": "bg-emerald-500 hover:bg-emerald-600 text-white",
+      "warning": "bg-yellow-400"
+    },
+    "borders": "border-orange-100/50 or border-slate-100"
+  },
+  "layouts": {
+    "marketing_page": {
+      "style": "The Tetris Grid",
+      "spacing": "Generous (p-8 to p-24)",
+      "hero": "Asymmetrical layout with overlapping image elements and high negative space. Never use generic centered text."
+    },
+    "dashboard": {
+      "style": "High Density Grid (Bento style)",
+      "spacing": "Tight (gap-6) but generous internal card padding (p-6 or p-8)",
+      "grid_classes": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+      "card_style": "rounded-3xl border border-orange-50/50 shadow-[0_8px_30px_rgba(0,0,0,0.04)] bg-white"
+    }
+  },
+  "components": {
+    "buttons": "Pill-shaped (rounded-full). Active states must have slight scale down (active:scale-95). High contrast text.",
+    "cards": "Neumorphic/Tactile variant. Soft ambient shadow + 1px subtle border. No pure flat cards without border.",
+    "inputs": "Use Shadcn inputs but override to rounded-2xl, border-slate-200, focus:ring-2 focus:ring-orange-500/20.",
+    "chat_bubbles": "For meal input, use distinct colored bubbles (User: bg-orange-500 text-white, AI: bg-slate-100 text-slate-900). Must be rounded-3xl with one sharper corner depending on message orientation."
+  },
+  "motion": {
+    "hover": "Subtle y-axis lift (-translate-y-1) and shadow increase for interactive cards.",
+    "entrance": "Staggered fade-up for dashboard widgets and meal history items.",
+    "transitions": "transition-transform duration-300 ease-out, transition-colors duration-200"
+  },
+  "icons": {
+    "library": "lucide-react",
+    "style": "Stroke width 2.5 for a slightly bolder, playful look."
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.unsplash.com/photo-1540420773420-3366772f4999?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHw0fHxoZWFsdGh5JTIwY29sb3JmdWwlMjBmb29kJTIwYm93bHxlbnwwfHx8fDE3ODc3MDExMjB8MA&ixlib=rb-4.1.0&q=85",
+        "category": "Hero Background / Marketing Focus",
+        "description": "Vibrant close-up of a fresh vegetable salad."
+      },
+      {
+        "url": "https://images.pexels.com/photos/13803823/pexels-photo-13803823.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "User Persona / Social Proof",
+        "description": "Woman eating healthy food, perfect for landing page testimonials or feature section."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1586865695935-89dbe583b287?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzR8MHwxfHNlYXJjaHwyfHxmcmVzaCUyMGZydWl0JTIwc3BsYXNofGVufDB8fHx8MTc4NzcwMTEyMHww&ixlib=rb-4.1.0&q=85",
+        "category": "Abstract / Meal Suggestion",
+        "description": "Fresh strawberry in a glass, useful for hydration or snack suggestions."
+      }
+    ],
+    "treatment": "Images must have rounded-3xl or rounded-full (for avatars/icons) to match the playful aesthetic. Never use harsh square corners on images."
+  },
+  "accessibility": {
+    "contrast": "Ensure all text on colored backgrounds meets APCA guidelines. Tangerine (#f97316) button must use white text. Mint green accents should use dark text.",
+    "focus": "All interactive elements must have focus-visible ring.",
+    "testing": "MANDATORY: Add data-testid to all buttons, links, inputs, and major UI sections. Convention: kebab-case, role-based."
+  },
+  "instructions_to_main_agent": [
+    "DO NOT use generic centered text for the marketing page. Use asymmetrical layouts (e.g., text left, playful overlapping food images on right).",
+    "Use Shadcn UI for forms, dropdowns, dialogs, but OVERRIDE border-radius to large values (rounded-2xl/rounded-3xl) to fit the playful theme.",
+    "For the daily nutrition dashboard, use Recharts (or Shadcn Charts) with custom soft colors matching the theme (Orange for Protein, Emerald for Fiber, Yellow for Carbs, etc.).",
+    "The chat interface for logging meals should feel like messaging a friendly nutritionist, not a terminal.",
+    "Implement a visible navigation bar on all pages. For the dashboard, a collapsible sidebar or clean top nav works best. Ensure header is NOT fully transparent over content.",
+    "Ensure all components are in .js/.jsx files as this is a JavaScript project (not TypeScript).",
+    "Use text-only chat-like input for meals that generates an AI-powered breakdown.",
+    "Create a daily summary dashboard for setting goals and showing AI meal suggestions based on remaining targets."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur) for sticky headers.",
+    "DO NOT apply universal transition (transition: all). Add transitions for specific interactive elements like button, input excluding transforms.",
+    "DO NOT center align the app container, i.e. do not add .App { text-align: center; } in the css file.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
+    "NEVER use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯 etc for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Use sonner for toasts.",
+    "All interactive and key informational elements MUST include a data-testid attribute for robust automated testing."
+  ]
+}

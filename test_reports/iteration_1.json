@@ -1,0 +1,26 @@
+{
+  "summary": "First-finish smoke test for PlateSense (meal-analysis app). Backend and frontend end-to-end flows all working. Backend health, auth, meals (POST/GET/DELETE), goals (GET/PUT), nutrition summary, and Claude Sonnet 5 suggestions all returned expected JSON. Frontend landing, login, dashboard (rings, meal-input, edit-goals, meal-analyze, suggestions-refresh) all functional with authenticated session cookie.",
+  "tested_scope": ["frontend", "backend", "auth", "integration"],
+  "passed": [
+    "GET /api/ -> {ok:true, app:'PlateSense'}",
+    "GET /api/auth/me unauth -> 401",
+    "GET /api/auth/me with Bearer token -> user JSON",
+    "PUT /api/goals {2200,140,260,70} -> echoes payload; GET /api/goals persists",
+    "POST /api/meals -> meal_id 'meal_...', numeric nutrients, summary, healthiness_score, tags (AI call ~5-10s)",
+    "GET /api/meals -> returns freshly created meal",
+    "DELETE /api/meals/{id} -> {ok:true}",
+    "GET /api/nutrition/summary -> totals/goals/remaining/meal_count for today",
+    "POST /api/suggestions -> {suggestions:[3 items with title/why/approx_calories/approx_protein_g]}",
+    "Frontend / landing renders hero + get-started-btn",
+    "Frontend /login shows Google button",
+    "Frontend /dashboard with session_token cookie loads with heading 'what's on the plate', nutrition rings (calories/protein/carbs/fat), meal-input, edit-goals-btn",
+    "Meal analyze from UI: typed meal + click analyze -> new meal card appears in meal-history, rings updated (259 cal etc.)",
+    "Edit goals dialog: changed calories to 2500, save closes dialog, ring denominator updated to /2500",
+    "Suggestions refresh: 3 suggestion cards rendered"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}
