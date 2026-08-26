@@ -32,7 +32,7 @@ export default function Landing() {
               <span className="text-orange-600">We do the math.</span>
             </h1>
             <p className="mt-6 text-lg text-slate-600 leading-relaxed max-w-xl">
-              Type any meal in plain English — &ldquo;2 eggs, toast and half an avocado&rdquo; — and PlateSense
+              Type any meal in plain English — &ldquo;2 eggs, toast and half an avocado&rdquo; — and RecipeRadar
               breaks down calories, protein, carbs, fat and more. Track your day, hit your goals, get
               smart suggestions for the next bite.
             </p>
@@ -119,7 +119,7 @@ export default function Landing() {
         </section>
 
         <footer className="border-t border-orange-100 py-8 text-center text-sm text-slate-500">
-          Made with 🥑 &nbsp;·&nbsp; PlateSense
+          Made with 🥑 &nbsp;·&nbsp; RecipeRadar
         </footer>
       </div>
     </div>

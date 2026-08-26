@@ -1,4 +1,4 @@
-"""PlateSense backend — meal nutrition analyzer with Emergent Google Auth + Claude Sonnet 5."""
+"""RecipeRadar backend — meal nutrition analyzer with Emergent Google Auth + Claude Sonnet 5."""
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -26,7 +26,7 @@ EMERGENT_LLM_KEY = os.environ["EMERGENT_LLM_KEY"]
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 
-app = FastAPI(title="PlateSense API")
+app = FastAPI(title="RecipeRadar API")
 api = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -169,7 +169,7 @@ async def logout(request: Request, response: Response):
 
 
 # ---------- LLM: meal analysis ----------
-MEAL_SYSTEM = """You are PlateSense, a friendly nutrition analyst. When the user describes a meal in plain language, estimate its nutrition and respond ONLY with strict JSON matching this schema:
+MEAL_SYSTEM = """You are RecipeRadar, a friendly nutrition analyst. When the user describes a meal in plain language, estimate its nutrition and respond ONLY with strict JSON matching this schema:
 
 {
   "items": [{"name": string, "quantity": string}],
@@ -584,7 +584,7 @@ async def suggestions(request: Request):
 
 @api.get("/")
 async def root():
-    return {"ok": True, "app": "PlateSense"}
+    return {"ok": True, "app": "RecipeRadar"}
 
 
 app.include_router(api)

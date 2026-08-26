@@ -15,7 +15,7 @@ export default function AppNav() {
             <Utensils className="h-5 w-5" strokeWidth={2.5} />
           </div>
           <div className="font-display font-semibold text-xl leading-none">
-            Plate<span className="text-orange-600">Sense</span>
+            Recipe<span className="text-orange-600">Radar</span>
           </div>
         </Link>
 

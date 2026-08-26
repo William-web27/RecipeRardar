@@ -15,7 +15,7 @@ class TestHealthAuth:
     def test_root(self, api_client):
         r = api_client.get(f"{BASE_URL}/api/")
         assert r.status_code == 200
-        assert r.json() == {"ok": True, "app": "PlateSense"}
+        assert r.json() == {"ok": True, "app": "RecipeRadar"}
 
     def test_me_unauthenticated(self, api_client):
         s = api_client
