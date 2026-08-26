@@ -1,6 +1,6 @@
 import { api } from "../lib/api";
 import { toast } from "sonner";
-import { Trash2, Clock } from "lucide-react";
+import { Trash2, Clock, Bookmark } from "lucide-react";
 
 function timeAgo(iso) {
   const d = new Date(iso);
@@ -11,7 +11,7 @@ function timeAgo(iso) {
   return d.toLocaleDateString();
 }
 
-export default function MealHistory({ meals, onChange }) {
+export default function MealHistory({ meals, onChange, onFavorited, savedMealIds }) {
   const del = async (id) => {
     try {
       await api.delete(`/meals/${id}`);
@@ -19,6 +19,20 @@ export default function MealHistory({ meals, onChange }) {
       onChange?.();
     } catch (e) {
       toast.error("Delete failed", { description: e.response?.data?.detail || e.message });
+    }
+  };
+
+  const save = async (m) => {
+    if (savedMealIds?.has(m.id)) {
+      toast.info("Already in favorites");
+      return;
+    }
+    try {
+      await api.post("/favorites", { meal_id: m.id });
+      toast.success("Saved as favorite", { description: "One-tap re-log next time." });
+      onFavorited?.();
+    } catch (e) {
+      toast.error("Save failed", { description: e.response?.data?.detail || e.message });
     }
   };
 
@@ -36,7 +50,9 @@ export default function MealHistory({ meals, onChange }) {
 
   return (
     <div className="space-y-3 stagger" data-testid="meal-history">
-      {meals.map((m) => (
+      {meals.map((m) => {
+        const isSaved = savedMealIds?.has(m.id);
+        return (
         <div key={m.id} className="rounded-3xl bg-white border border-orange-100 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:-translate-y-0.5 transition-transform duration-300" data-testid={`meal-card-${m.id}`}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -51,14 +67,26 @@ export default function MealHistory({ meals, onChange }) {
                 ))}
               </div>
             </div>
-            <button
-              onClick={() => del(m.id)}
-              data-testid={`meal-delete-${m.id}`}
-              className="p-2 rounded-full text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-              aria-label="Delete meal"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => save(m)}
+                data-testid={`meal-save-${m.id}`}
+                aria-pressed={isSaved}
+                className={`p-2 rounded-full transition-colors ${isSaved ? "text-yellow-600 bg-yellow-50" : "text-slate-400 hover:bg-yellow-50 hover:text-yellow-600"}`}
+                aria-label={isSaved ? "Already saved" : "Save as favorite"}
+                title={isSaved ? "Already in favorites" : "Save as favorite"}
+              >
+                <Bookmark className="h-4 w-4" fill={isSaved ? "currentColor" : "none"} />
+              </button>
+              <button
+                onClick={() => del(m.id)}
+                data-testid={`meal-delete-${m.id}`}
+                className="p-2 rounded-full text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                aria-label="Delete meal"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className="mt-4 grid grid-cols-4 gap-2">
             {[
@@ -74,7 +102,8 @@ export default function MealHistory({ meals, onChange }) {
             ))}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

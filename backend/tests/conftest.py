@@ -47,6 +47,7 @@ def _make_user(db):
 
 def _cleanup_user(db, uid):
     db.meals.delete_many({"user_id": uid})
+    db.favorites.delete_many({"user_id": uid})
     db.goals.delete_many({"user_id": uid})
     db.user_sessions.delete_many({"user_id": uid})
     db.users.delete_many({"user_id": uid})

@@ -286,6 +286,81 @@ async def delete_meal(meal_id: str, request: Request):
     return {"ok": True}
 
 
+# ---------- Favorites (saved recipes) ----------
+class FavoriteFromMeal(BaseModel):
+    meal_id: str
+    name: Optional[str] = None
+
+
+@api.post("/favorites")
+async def save_favorite(payload: FavoriteFromMeal, request: Request):
+    user = await get_current_user(request)
+    meal = await db.meals.find_one({"id": payload.meal_id, "user_id": user.user_id}, {"_id": 0})
+    if not meal:
+        raise HTTPException(status_code=404, detail="Meal not found")
+    fav_id = f"fav_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    doc = {
+        "id": fav_id,
+        "user_id": user.user_id,
+        "source_meal_id": payload.meal_id,
+        "name": (payload.name or meal.get("description", "Saved meal")).strip()[:80],
+        "description": meal.get("description", ""),
+        "items": meal.get("items", []),
+        "nutrients": meal.get("nutrients", {}),
+        "summary": meal.get("summary", ""),
+        "healthiness_score": meal.get("healthiness_score", 0),
+        "tags": [t for t in meal.get("tags", []) if t != "photo"],
+        "created_at": now.isoformat(),
+    }
+    await db.favorites.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/favorites")
+async def list_favorites(request: Request):
+    user = await get_current_user(request)
+    cursor = db.favorites.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", -1).limit(200)
+    return await cursor.to_list(length=200)
+
+
+@api.delete("/favorites/{fav_id}")
+async def delete_favorite(fav_id: str, request: Request):
+    user = await get_current_user(request)
+    result = await db.favorites.delete_one({"id": fav_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Favorite not found")
+    return {"ok": True}
+
+
+@api.post("/favorites/{fav_id}/log")
+async def log_favorite(fav_id: str, request: Request):
+    """Re-log a saved favorite as a new meal today — no AI call, instant."""
+    user = await get_current_user(request)
+    fav = await db.favorites.find_one({"id": fav_id, "user_id": user.user_id}, {"_id": 0})
+    if not fav:
+        raise HTTPException(status_code=404, detail="Favorite not found")
+    meal_id = f"meal_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    doc = {
+        "id": meal_id,
+        "user_id": user.user_id,
+        "description": fav.get("description") or fav.get("name", ""),
+        "items": fav.get("items", []),
+        "nutrients": fav.get("nutrients", {}),
+        "summary": fav.get("summary", ""),
+        "healthiness_score": fav.get("healthiness_score", 0),
+        "tags": (fav.get("tags", []) or []) + ["favorite"],
+        "source": "favorite",
+        "from_favorite_id": fav_id,
+        "created_at": now.isoformat(),
+    }
+    await db.meals.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
 @api.post("/meals/photo")
 async def create_meal_from_photo(payload: MealPhoto, request: Request):
     user = await get_current_user(request)

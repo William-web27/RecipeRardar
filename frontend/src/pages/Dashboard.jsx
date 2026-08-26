@@ -10,6 +10,7 @@ import GoalsDialog from "../components/GoalsDialog";
 import SuggestionsCard from "../components/SuggestionsCard";
 import StreakBanner from "../components/StreakBanner";
 import WeeklyTrends from "../components/WeeklyTrends";
+import FavoritesBar from "../components/FavoritesBar";
 
 export default function Dashboard() {
   const { user, loading } = useAuth();
@@ -19,6 +20,7 @@ export default function Dashboard() {
   const [goals, setGoals] = useState(null);
   const [streak, setStreak] = useState(null);
   const [trends, setTrends] = useState(null);
+  const [favorites, setFavorites] = useState([]);
 
   useEffect(() => {
     if (!loading && !user) navigate("/login", { replace: true });
@@ -26,18 +28,20 @@ export default function Dashboard() {
 
   const refresh = useCallback(async () => {
     try {
-      const [m, s, g, st, tr] = await Promise.all([
+      const [m, s, g, st, tr, fv] = await Promise.all([
         api.get("/meals"),
         api.get("/nutrition/summary"),
         api.get("/goals"),
         api.get("/streak"),
         api.get("/trends/weekly"),
+        api.get("/favorites"),
       ]);
       setMeals(m.data);
       setSummary(s.data);
       setGoals(g.data);
       setStreak(st.data);
       setTrends(tr.data);
+      setFavorites(fv.data);
     } catch (e) {
       console.error(e);
     }
@@ -60,6 +64,7 @@ export default function Dashboard() {
     const now = new Date();
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
   });
+  const savedMealIds = new Set((favorites || []).map((f) => f.source_meal_id).filter(Boolean));
 
   return (
     <div className="min-h-screen bg-orange-50/50 relative overflow-hidden grain">
@@ -95,6 +100,10 @@ export default function Dashboard() {
           </div>
 
           <div className="mb-6">
+            <FavoritesBar favorites={favorites} onLogged={refresh} onChanged={refresh} />
+          </div>
+
+          <div className="mb-6">
             <WeeklyTrends trends={trends} />
           </div>
 
@@ -103,14 +112,19 @@ export default function Dashboard() {
               <MealChat onMealCreated={refresh} />
               <div>
                 <div className="font-display text-xl font-semibold mb-3">Today&apos;s meals</div>
-                <MealHistory meals={todaysMeals} onChange={refresh} />
+                <MealHistory meals={todaysMeals} onChange={refresh} onFavorited={refresh} savedMealIds={savedMealIds} />
               </div>
             </div>
             <div className="lg:col-span-5 space-y-6">
               {meals.length > todaysMeals.length && (
                 <div>
                   <div className="font-display text-xl font-semibold mb-3">Earlier</div>
-                  <MealHistory meals={meals.filter((m) => !todaysMeals.find((t) => t.id === m.id)).slice(0, 20)} onChange={refresh} />
+                  <MealHistory
+                    meals={meals.filter((m) => !todaysMeals.find((t) => t.id === m.id)).slice(0, 20)}
+                    onChange={refresh}
+                    onFavorited={refresh}
+                    savedMealIds={savedMealIds}
+                  />
                 </div>
               )}
             </div>

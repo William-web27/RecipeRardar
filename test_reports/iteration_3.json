@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 3 tested the new Favorites (Recipe Save) feature end to end. Backend: added /app/backend/tests/test_favorites.py (17 tests) covering POST/GET/DELETE /api/favorites, POST /api/favorites/{id}/log, ownership isolation, validation and regression; full suite = 35/35 passed (favorites 17 + existing 18 for streak/trends/photo/meals/goals/summary/suggestions). Frontend: authenticated Dashboard flow via session_token cookie (TEST_fe_user) — bookmark button on every meal card, FavoritesBar appears after save, one-tap re-log adds a meal card instantly (<1s, no AI) and updates rings/summary, repeated logging creates duplicates as designed, remove deletes the chip and persists across reload. No blocking defects found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/favorites", "issue": "No duplicate guard — favoriting the same meal N times creates N identical favorites (chips pile up in FavoritesBar). Intentional? consider unique index on (user_id, source meal/name)."},
+      {"endpoint": "POST /api/favorites", "issue": "Favorite does not store the origin meal_id, so there is no way to detect 'already saved' and grey out the bookmark icon in the UI."},
+      {"endpoint": "POST /api/favorites/{id}/log", "issue": "Response includes extra fields (source, from_favorite_id) not present on AI-created meals — meal shape is now non-uniform across creation paths. Harmless today but add them (default None/'ai') to the text/photo paths for consistency."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "WeeklyTrends (pre-existing, not favorites)", "issue": "Left calorie YAxis has width={40}, which clips 4-digit tick labels: ticks render as '800/100/400/700/0' instead of '2800/2100/1400/700/0' — misleading axis. Increase width to ~52 or use a compact tickFormatter.", "selector": ".recharts-yAxis", "priority": "MEDIUM"},
+      {"component": "FavoritesBar", "issue": "favorite-remove-<id> is opacity-0 until hover/focus (group-hover). Discoverable on desktop only — on touch devices there is no hover state, so removing a favorite is effectively unreachable.", "selector": "[data-testid^='favorite-remove-']", "priority": "MEDIUM"},
+      {"component": "MealHistory", "issue": "Bookmark button gives no persistent saved state (icon never fills / no disabled state), so users can't tell a meal is already saved and can double-save it.", "selector": "[data-testid^='meal-save-']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard", "issues": ["Recharts console warning 'The width(-1) and height(-1) of chart should be greater than 0' still fires on mount despite minWidth/minHeight=0 (noisy, harmless).", "FavoritesBar is hidden entirely when there are 0 favorites — no empty-state hint, so the Quick-log feature is invisible/undiscoverable until a user happens to click a bookmark icon."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_favorites.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/iteration3.xml"
+  ],
+  "action_items": [
+    "Fix WeeklyTrends left YAxis width (4-digit calorie ticks are clipped to 3 digits).",
+    "Make favorite-remove affordance visible without hover (touch devices).",
+    "Optional: dedupe favorites / reflect saved state on the bookmark icon; store origin meal_id on the favorite."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~603 lines with favorites added inline — split into routers (auth/meals/favorites/insights) before it grows more.",
+    "Favorites re-log copies nutrients but not `items` validation — if a legacy favorite lacks `nutrients`, POST /favorites/{id}/log inserts a meal with nutrients={} and MealHistory would crash on m.nutrients.calories (frontend reads it unguarded). Defensively default nutrients to a full Nutrients() model on log.",
+    "No index on favorites.user_id (list query + 200 limit sort on created_at string). Add a compound index (user_id, created_at).",
+    "conftest._cleanup_user did not delete favorites — fixed in this iteration to avoid TEST_ data leaking into the favorites collection."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_favorites.py",
+    "/app/backend/tests/conftest.py"
+  ],
+  "success_rate": {"backend": "100% (35/35)", "frontend": "100% of tested favorites flows"},
+  "seed_data_creation": "pytest creates/deletes isolated TEST_user_* users per test (favorites now cleaned up too). UI user TEST_fe_user (Fiona Tester, session_token TEST_fe_session_token_1) retained with its 6 original meals; favorites and the 2 re-logged meals created during UI testing were deleted (db.favorites.deleteMany({user_id:'TEST_fe_user'}); db.meals.deleteMany({user_id:'TEST_fe_user',source:'favorite'})).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Cookie/Bearer session_token = TEST_fe_session_token_1 (user_id TEST_fe_user); Emergent Google OAuth otherwise, no passwords.",
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/ -v (pytest.ini forces -n 2 --dist loadscope). tests/test_favorites.py covers the Favorites feature incl. cross-user 404 isolation, delete-source-meal-then-relog, and summary/trends deltas. For UI, add cookie session_token=TEST_fe_session_token_1 for domain nutrition-analyzer-35.preview.emergentagent.com then goto /dashboard. NOTE: the selector [data-testid^='meal-card-'] matches BOTH the 'Today's meals' and 'Earlier' MealHistory lists (6 baseline cards for TEST_fe_user, 3 of them today) — assert on deltas, not absolute counts. FavoritesBar renders nothing when the user has 0 favorites.",
+  "rca_of_the_issue": "N/A — no functional failures. The clipped calorie axis labels are caused by recharts YAxis width={40} in WeeklyTrends.jsx being narrower than the 4-digit tick text (SVG clips the leading digit); pre-existing, unrelated to the favorites feature."
+}

@@ -25,8 +25,8 @@ export default function WeeklyTrends({ trends }) {
           <LineChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
             <CartesianGrid stroke="#fef3e2" vertical={false} />
             <XAxis dataKey="label" stroke="#94a3b8" tickLine={false} axisLine={false} fontSize={12} />
-            <YAxis yAxisId="cal" stroke="#f97316" tickLine={false} axisLine={false} fontSize={11} width={40} />
-            <YAxis yAxisId="pro" orientation="right" stroke="#10b981" tickLine={false} axisLine={false} fontSize={11} width={30} />
+            <YAxis yAxisId="cal" stroke="#f97316" tickLine={false} axisLine={false} fontSize={11} width={52} />
+            <YAxis yAxisId="pro" orientation="right" stroke="#10b981" tickLine={false} axisLine={false} fontSize={11} width={36} />
             <Tooltip
               contentStyle={{ borderRadius: 12, border: "1px solid #fed7aa", fontFamily: "Nunito", fontSize: 12 }}
               cursor={{ stroke: "#fdba74", strokeDasharray: "4 4" }}
