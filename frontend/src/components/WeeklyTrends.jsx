@@ -45,6 +45,12 @@ export default function WeeklyTrends({ trends }) {
   }));
 
   const leftGoal = trends.goals?.[leftKey];
+  const rightGoal = trends.goals?.[rightKey];
+
+  const maxL = Math.max(...data.map((d) => d[L.label]), leftGoal || 0);
+  const maxR = Math.max(...data.map((d) => d[R.label]), rightGoal || 0);
+  const domainL = [0, Math.ceil((maxL || 1) * 1.15)];
+  const domainR = [0, Math.ceil((maxR || 1) * 1.15)];
 
   return (
     <div className="rounded-3xl bg-white border border-orange-100 p-6 shadow-[0_8px_30px_rgba(0,0,0,0.03)]" data-testid="weekly-trends">
@@ -81,13 +87,34 @@ export default function WeeklyTrends({ trends }) {
           <LineChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
             <CartesianGrid stroke="#fef3e2" vertical={false} />
             <XAxis dataKey="label" stroke="#94a3b8" tickLine={false} axisLine={false} fontSize={12} />
-            <YAxis yAxisId="l" stroke={L.color} tickLine={false} axisLine={false} fontSize={11} width={L.axisWidth} />
-            <YAxis yAxisId="r" orientation="right" stroke={R.color} tickLine={false} axisLine={false} fontSize={11} width={R.axisWidth} />
+            <YAxis yAxisId="l" domain={domainL} stroke={L.color} tickLine={false} axisLine={false} fontSize={11} width={L.axisWidth} />
+            <YAxis yAxisId="r" domain={domainR} orientation="right" stroke={R.color} tickLine={false} axisLine={false} fontSize={11} width={R.axisWidth} />
             <Tooltip
               contentStyle={{ borderRadius: 12, border: "1px solid #fed7aa", fontFamily: "Nunito", fontSize: 12 }}
               cursor={{ stroke: "#fdba74", strokeDasharray: "4 4" }}
             />
-            {leftGoal ? <ReferenceLine yAxisId="l" y={leftGoal} stroke={L.color} strokeOpacity={0.35} strokeDasharray="4 4" /> : null}
+            {leftGoal ? (
+              <ReferenceLine
+                yAxisId="l"
+                y={leftGoal}
+                stroke={L.color}
+                strokeOpacity={0.55}
+                strokeDasharray="6 4"
+                strokeWidth={1.5}
+                label={{ value: `${L.short} goal ${leftGoal}${L.unit}`, position: "insideTopLeft", fill: L.color, fontSize: 10, fontWeight: 700 }}
+              />
+            ) : null}
+            {rightGoal ? (
+              <ReferenceLine
+                yAxisId="r"
+                y={rightGoal}
+                stroke={R.color}
+                strokeOpacity={0.55}
+                strokeDasharray="6 4"
+                strokeWidth={1.5}
+                label={{ value: `${R.short} goal ${rightGoal}${R.unit}`, position: "insideTopRight", fill: R.color, fontSize: 10, fontWeight: 700 }}
+              />
+            ) : null}
             <Line yAxisId="l" type="monotone" dataKey={L.label} stroke={L.color} strokeWidth={2.5} dot={{ r: 4, fill: L.color }} activeDot={{ r: 6 }} />
             <Line yAxisId="r" type="monotone" dataKey={R.label} stroke={R.color} strokeWidth={2.5} dot={{ r: 4, fill: R.color }} activeDot={{ r: 6 }} />
           </LineChart>
