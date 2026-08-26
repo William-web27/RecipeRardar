@@ -1,0 +1,46 @@
+{
+  "summary": "Backend-only bug-fix verification for the 'goldfish 404' report. Added /app/backend/tests/test_ai_retry.py (23 tests) covering the exact repro inputs, error-code normalization (502 not 404), and full endpoint regression, plus a one-off concurrency probe /app/backend/tests/stress_goldfish.py. Full suite now 58/58 PASSED. POST /api/meals with 'goldfish', 'goldfish crackers', 'a handful of goldfish crackers' each returned 200 with numeric nutrients, non-empty summary, tags[], int healthiness_score and id prefixed 'meal_'; 'goldfish' repeated 3x sequentially = 3x200; 12 concurrent 'goldfish' requests = 12x200, zero 404s. Backend logs show ZERO 'AI call attempt N failed' warnings across ~30 live AI calls, so the retry path never even had to engage — the upstream LLM is currently healthy and the original 404 could not be reproduced. Verified error paths: empty description -> 400, unauthenticated -> 401, DELETE unknown meal -> 404 'Meal not found', GET /api/meals/{id} -> 405 (route does not exist). Unit-tested _retry_ai directly (retries once and succeeds on 2nd attempt; re-raises last exception after 2 tries). Regression: 'an apple', 'cup of black coffee', non-food input -> 200; POST /api/suggestions -> 200 with suggestions array; GET /api/meals, /api/nutrition/summary, /api/streak, /api/trends/weekly, /api/goals, /api/favorites -> 200; favorites flow (create meal -> POST /favorites -> GET /favorites lists it -> POST /favorites/{id}/log creates a distinct meal -> DELETE) all 200; photo meal endpoint 200.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/meals, POST /api/meals/photo", "issue": "Only the AI call is inside the try/except. Response-shaping right after it is unguarded: Nutrients(**parsed.get('nutrients', {})) raises pydantic ValidationError and int(parsed.get('healthiness_score', 0)) raises ValueError/TypeError if the model returns a list/str/null -> unhandled 500 instead of the friendly 502. Move parsing inside the same try (or validate inside analyze_*_with_ai so a malformed payload also triggers the retry)."},
+      {"endpoint": "_retry_ai", "issue": "tries=2 with a single 0.8s backoff. If the upstream failure is a short rate-limit/cold-start, 2 attempts 0.8s apart is a thin margin; tries=3 with delay 0.8/1.6 costs at most ~2.4s extra only on the failure path."},
+      {"endpoint": "_retry_ai", "issue": "It catches bare Exception, so it would also swallow-and-retry programming errors (e.g. a JSONDecodeError from _extract_json) — acceptable, but note that a deterministic bad-JSON response now costs 2 full LLM calls before the 502."},
+      {"endpoint": "server.py", "issue": "`import asyncio` is placed mid-file (line 209) instead of the top-level import block."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "MealChat analyze (root cause of the reported toast)", "issue": "The reported toast read 'Request failed with status code 404' — that string is axios's e.message, used only when e.response.data.detail is ABSENT. Every FastAPI HTTPException (incl. all 404s in server.py) returns a JSON body with `detail`, so the 404 the user saw did NOT come from application code; it came from the platform/ingress layer (backend hot-reload / cold start / pod not ready while the request was in flight). Consequence: the 502 normalization in server.py cannot prevent a recurrence. Fix in the client: in MealChat.jsx (and PhotoMealButton/SuggestionsCard) retry once on 404/502/503/network errors and show the friendly 'AI is briefly unavailable — please try again in a moment.' copy instead of leaking axios's raw message.", "affected_selectors": ["[data-testid='meal-input']", "[data-testid='meal-chat']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_ai_retry.py",
+    "/app/backend/tests/stress_goldfish.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iteration4.xml"
+  ],
+  "action_items": [
+    "Frontend (real fix for the user-visible bug): make MealChat.jsx / PhotoMealButton.jsx / SuggestionsCard.jsx retry once on 404/502/503/network error and never surface axios's raw 'Request failed with status code NNN' — always show the friendly AI-unavailable copy.",
+    "Backend: move nutrients/healthiness_score parsing inside the try block so malformed AI JSON returns 502, not an unhandled 500.",
+    "Optional: bump _retry_ai to tries=3 and move `import asyncio` to the top of server.py."
+  ],
+  "critical_code_review_comments": [
+    "The 404 in the report almost certainly originated outside FastAPI (no `detail` in the body), so the server-side 502 mapping is defensive-only — the client still needs retry/normalization or the same toast can reappear.",
+    "server.py is ~622 lines with all routers inline; split into routers/ (auth, meals, favorites, insights) plus an ai.py holding MEAL_SYSTEM/_retry_ai/analyze_* helpers.",
+    "backend_test.py depended on a pre-existing /tmp/lunch.jpg which no longer existed (ephemeral /tmp), failing the photo contract test for an environmental reason; test now self-heals by re-fetching a real food photo."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ai_retry.py",
+    "/app/backend/tests/stress_goldfish.py",
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "100% (58/58)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "pytest fixtures create/delete isolated TEST_user_* users + their meals/favorites/goals per session/test. stress_goldfish.py creates and fully deletes a TEST_stress_* user and its 12 meals. No residual test data.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/ -q (pytest.ini forces -n 2 --dist loadscope); ~47s, 58 tests, all AI-live. tests/test_ai_retry.py holds the goldfish repro + 404/502 normalization assertions; keep it as regression. tests/stress_goldfish.py is a manual probe (12 concurrent 'goldfish' POSTs) — run it if the 404 is reported again, and check /var/log/supervisor/backend.out.log for the actual status line: if the app never logs a 404 for POST /api/meals, the 404 came from the ingress, not the app. UI user TEST_fe_user / session_token TEST_fe_session_token_1 still seeded for frontend work.",
+  "rca_of_the_issue": "Could not reproduce a 404 from the application: 18 live 'goldfish' POSTs (3 variants + 3 sequential + 12 concurrent) all returned 200, and no retry-warning or 404 appears in backend logs. Strongest evidence points away from the app: the user's toast description was axios's e.message ('Request failed with status code 404'), which MealChat.jsx only shows when e.response.data.detail is missing — but every FastAPI HTTPException in server.py includes `detail`. Therefore the 404 body had no JSON detail, i.e. it was produced by the Kubernetes ingress/proxy while the backend was restarting (hot-reload) or not yet ready. The applied backend fix (_retry_ai + 502 normalization) is correct and verified for genuine upstream LLM failures, but it cannot intercept a proxy-level 404; the durable mitigation is a client-side retry + normalized error copy in MealChat/PhotoMealButton/SuggestionsCard."
+}

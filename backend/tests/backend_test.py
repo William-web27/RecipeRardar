@@ -8,6 +8,19 @@ import pytest
 from conftest import BASE_URL, client_for, insert_meal
 
 IMAGE_PATH = "/tmp/lunch.jpg"
+IMAGE_URL = "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80"
+
+
+def _ensure_test_image():
+    """/tmp is ephemeral across iterations — re-fetch the real food photo if absent."""
+    if os.path.exists(IMAGE_PATH) and os.path.getsize(IMAGE_PATH) > 10_000:
+        return
+    import requests
+    r = requests.get(IMAGE_URL, timeout=60)
+    if r.status_code != 200 or len(r.content) < 10_000:
+        pytest.skip("could not fetch test food photo")
+    with open(IMAGE_PATH, "wb") as f:
+        f.write(r.content)
 
 
 # ---------- module: health / auth ----------
@@ -139,6 +152,7 @@ class TestPhotoMeal:
         assert r.status_code == 401
 
     def test_photo_meal_contract(self, auth_client, mongo, session_user):
+        _ensure_test_image()
         assert os.path.exists(IMAGE_PATH), "test image missing"
         b64 = base64.b64encode(open(IMAGE_PATH, "rb").read()).decode()
         payload = {"image_base64": b64, "mime_type": "image/jpeg", "hint": "plate of food"}

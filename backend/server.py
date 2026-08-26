@@ -12,6 +12,7 @@ import uuid
 import json
 import re
 import logging
+import asyncio
 import httpx
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
@@ -206,6 +207,20 @@ def _extract_json(text: str) -> dict:
     return json.loads(text)
 
 
+async def _retry_ai(fn, *args, tries: int = 2, delay: float = 0.8, **kwargs):
+    """Retry an async AI call once with backoff on any exception."""
+    last = None
+    for i in range(tries):
+        try:
+            return await fn(*args, **kwargs)
+        except Exception as e:  # noqa: BLE001
+            last = e
+            log.warning("AI call attempt %d failed: %s", i + 1, e)
+            if i < tries - 1:
+                await asyncio.sleep(delay * (i + 1))
+    raise last
+
+
 async def analyze_meal_with_ai(description: str) -> dict:
     chat = LlmChat(
         api_key=EMERGENT_LLM_KEY,
@@ -246,12 +261,15 @@ async def create_meal(payload: MealCreate, request: Request):
         raise HTTPException(status_code=400, detail="description required")
 
     try:
-        parsed = await analyze_meal_with_ai(payload.description)
+        parsed = await _retry_ai(analyze_meal_with_ai, payload.description)
+        nutrients = Nutrients(**parsed.get("nutrients", {})).model_dump()
+        healthiness_score = int(parsed.get("healthiness_score", 0) or 0)
+    except HTTPException:
+        raise
     except Exception as e:
         log.exception("AI analysis failed")
-        raise HTTPException(status_code=502, detail=f"AI analysis failed: {e}")
+        raise HTTPException(status_code=502, detail="AI is briefly unavailable — please try again in a moment.")
 
-    nutrients = Nutrients(**parsed.get("nutrients", {})).model_dump()
     meal_id = f"meal_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
     doc = {
@@ -261,7 +279,7 @@ async def create_meal(payload: MealCreate, request: Request):
         "items": parsed.get("items", []),
         "nutrients": nutrients,
         "summary": parsed.get("summary", ""),
-        "healthiness_score": int(parsed.get("healthiness_score", 0)),
+        "healthiness_score": healthiness_score,
         "tags": parsed.get("tags", []),
         "created_at": now.isoformat(),
     }
@@ -380,12 +398,15 @@ async def create_meal_from_photo(payload: MealPhoto, request: Request):
         raise HTTPException(status_code=400, detail="image too large (max ~8MB)")
 
     try:
-        parsed = await analyze_photo_with_ai(b64, payload.mime_type, payload.hint)
+        parsed = await _retry_ai(analyze_photo_with_ai, b64, payload.mime_type, payload.hint)
+        nutrients = Nutrients(**parsed.get("nutrients", {})).model_dump()
+        healthiness_score = int(parsed.get("healthiness_score", 0) or 0)
+    except HTTPException:
+        raise
     except Exception as e:
         log.exception("photo AI failed")
-        raise HTTPException(status_code=502, detail=f"AI photo analysis failed: {e}")
+        raise HTTPException(status_code=502, detail="Photo analysis is briefly unavailable — please try again in a moment.")
 
-    nutrients = Nutrients(**parsed.get("nutrients", {})).model_dump()
     description = (parsed.get("description") or payload.hint or "Meal photo").strip()
     meal_id = f"meal_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
@@ -396,7 +417,7 @@ async def create_meal_from_photo(payload: MealPhoto, request: Request):
         "items": parsed.get("items", []),
         "nutrients": nutrients,
         "summary": parsed.get("summary", ""),
-        "healthiness_score": int(parsed.get("healthiness_score", 0)),
+        "healthiness_score": healthiness_score,
         "tags": parsed.get("tags", []) + ["photo"],
         "source": "photo",
         "created_at": now.isoformat(),
@@ -568,17 +589,19 @@ async def suggestions(request: Request):
         f"{int(remaining['fat_g'])}g fat. "
         "Suggest 3 meals/snacks the user could eat next."
     )
-    try:
+    async def _call():
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"suggest_{uuid.uuid4().hex[:10]}",
             system_message=SUGGEST_SYSTEM,
         ).with_model("anthropic", "claude-sonnet-5")
         resp = await chat.send_message(UserMessage(text=prompt))
-        data = _extract_json(resp)
+        return _extract_json(resp)
+    try:
+        data = await _retry_ai(_call)
     except Exception as e:
         log.exception("suggestion ai failed")
-        raise HTTPException(status_code=502, detail=f"AI suggestion failed: {e}")
+        raise HTTPException(status_code=502, detail="Suggestions briefly unavailable — please try again in a moment.")
     return data
 
 

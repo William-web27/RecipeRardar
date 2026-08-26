@@ -1,0 +1,27 @@
+{
+  "summary": "Verified iteration-5 durable fix (client-side callAiApi retry + friendly error copy) end-to-end. Backend: full pytest suite re-run = 58/58 PASSED in 41s (includes test_ai_retry.py goldfish repro, 502-normalization, favorites flow, suggestions, photo meal). Frontend (public URL, session_token cookie TEST_fe_session_token_1): /dashboard loaded; 'goldfish' -> new meal card in meal-history within ~6s with toast 'Meal analyzed - A crunchy snack ... watch the sodium' (140 cal / 3g prot / 20g carb / 5g fat); 'a cup of black coffee' -> success toast + card; Suggest (suggestions-refresh-btn) -> 3 suggestion-<i> items rendered. Retry path explicitly proven: intercepted the FIRST POST /api/meals with a bodyless ingress-style 404 via page.route — client made a 2nd attempt (2 POSTs observed), the meal card appeared from the retry, NO error toast at all, and no 'Request failed with status code' string appeared in any toast or in the page body in any run. Regressions pass: meal-save-<id> -> favorites-bar appears -> favorite-log-<id> creates a new meal card ('Logged' toast); WeeklyTrends renders and trends-left-picker-carbs_g switches the left axis to Carbs (legend + 'Carb goal 250g' reference line update).",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "server.py", "issue": "FastAPI @app.on_event('shutdown') is deprecated (DeprecationWarning in test output) — migrate to lifespan handlers."}
+  ]},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "WeeklyTrends chart (Last 7 days)", "issues": ["Left Y-axis tick labels look horizontally clipped when values are 3-4 digits: with Carbs selected the ticks render as '88 / 25 / 50 / 75 / 0' (first digit cut) instead of e.g. 300/225/150/75/0; with Calories they render '2300/1600/1200/600/0' with visibly uneven spacing. Add left margin/padding to the axis or widen the tick label area."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_ai_retry.py", "/app/backend/tests/backend_test.py", "/app/backend/tests/test_favorites.py", "/app/test_reports/pytest/iteration5.xml"],
+  "action_items": ["Optional: fix clipped left Y-axis tick labels in WeeklyTrends.", "Optional: replace deprecated @app.on_event('shutdown') with FastAPI lifespan."],
+  "critical_code_review_comments": [
+    "aiClient.js line 30: the ternary's else-branch is `detail` which is already known falsy at that point — the expression is dead code; simplify to `const friendly = detail || FRIENDLY;`. Behaviour is correct today (always ends at FRIENDLY), so no functional bug.",
+    "callAiApi retries on ANY 404 including a genuine app 404 (e.g. favorite/meal not found) — harmless for the 3 AI POSTs currently using it, but do not reuse it for GET/DELETE-by-id routes or a real 404 costs a duplicate request.",
+    "Retry is not idempotency-keyed: if the first POST /api/meals actually reached the backend and only the response was lost at the proxy, the retry can create a duplicate meal. Consider a client-generated request id honoured by the backend if duplicates are ever reported."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (58/58)", "frontend": "100% (7/7 checks: dashboard load, goldfish analyze, coffee analyze, suggestions, injected-404 retry recovery, favorites save+log, trends metric picker)"},
+  "seed_data_creation": "Reused seeded TEST_fe_user / TEST_fe_session_token_1. Frontend runs added 3 real meals ('goldfish' x2, 'a cup of black coffee') and 2 favorites for that test user — left in place for future UI runs.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend: cd /app/backend && python -m pytest tests/ -q (58 tests, ~41s, live AI). Frontend: add cookie session_token=TEST_fe_session_token_1 (httpOnly/secure/sameSite=None) then goto /dashboard. To prove the retry fix, use page.route('**/api/meals') and fulfill the first POST with a bodyless 404 then route.continue_() — verified working this iteration. Only open item is a cosmetic clipped Y-axis label in WeeklyTrends.",
+  "rca_of_the_issue": "Original toast 'Couldn't analyze meal — Request failed with status code 404' came from a proxy-level bodyless 404 (no FastAPI `detail`), so axios's raw e.message was surfaced. Iteration-5 fix confirmed: callAiApi retries once on 404/502/503/504/network errors and always throws a friendly message, so the raw axios string can no longer be shown and a transient ingress 404 is transparently recovered (verified by injection)."
+}

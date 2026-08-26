@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { api } from "../lib/api";
 import { toast } from "sonner";
 import { Send, Loader2, Sparkles } from "lucide-react";
 import { Textarea } from "./ui/textarea";
 import { Button } from "./ui/button";
 import PhotoMealButton from "./PhotoMealButton";
+import { callAiApi } from "../lib/aiClient";
 
 const EXAMPLES = [
   "2 scrambled eggs and a slice of whole wheat toast",
@@ -22,12 +22,12 @@ export default function MealChat({ onMealCreated }) {
     if (!desc || loading) return;
     setLoading(true);
     try {
-      const { data } = await api.post("/meals", { description: desc });
+      const data = await callAiApi("post", "/meals", { description: desc });
       toast.success("Meal analyzed", { description: data.summary });
       setText("");
       onMealCreated?.(data);
     } catch (e) {
-      toast.error("Couldn't analyze meal", { description: e.response?.data?.detail || e.message });
+      toast.error("Couldn't analyze meal", { description: e.message });
     } finally {
       setLoading(false);
     }

@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from "recharts";
 
 const METRICS = {
-  calories: { label: "Calories",   short: "Cal",   color: "#f97316", axisWidth: 52, unit: "" },
-  protein_g: { label: "Protein",    short: "Prot",  color: "#10b981", axisWidth: 36, unit: "g" },
-  carbs_g:   { label: "Carbs",      short: "Carb",  color: "#eab308", axisWidth: 36, unit: "g" },
-  fat_g:     { label: "Fat",        short: "Fat",   color: "#0ea5e9", axisWidth: 36, unit: "g" },
+  calories: { label: "Calories",   short: "Cal",   color: "#f97316", axisWidth: 56, unit: "" },
+  protein_g: { label: "Protein",    short: "Prot",  color: "#10b981", axisWidth: 44, unit: "g" },
+  carbs_g:   { label: "Carbs",      short: "Carb",  color: "#eab308", axisWidth: 44, unit: "g" },
+  fat_g:     { label: "Fat",        short: "Fat",   color: "#0ea5e9", axisWidth: 44, unit: "g" },
 };
 const KEYS = ["calories", "protein_g", "carbs_g", "fat_g"];
 const STORE_KEY = "rr_trends_metrics_v1";
@@ -84,7 +84,7 @@ export default function WeeklyTrends({ trends }) {
 
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-          <LineChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+          <LineChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="#fef3e2" vertical={false} />
             <XAxis dataKey="label" stroke="#94a3b8" tickLine={false} axisLine={false} fontSize={12} />
             <YAxis yAxisId="l" domain={domainL} stroke={L.color} tickLine={false} axisLine={false} fontSize={11} width={L.axisWidth} />

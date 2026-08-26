@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { api } from "../lib/api";
 import { Button } from "./ui/button";
 import { Loader2, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
+import { callAiApi } from "../lib/aiClient";
 
 export default function SuggestionsCard() {
   const [loading, setLoading] = useState(false);
@@ -11,10 +11,10 @@ export default function SuggestionsCard() {
   const fetchSuggestions = async () => {
     setLoading(true);
     try {
-      const { data } = await api.post("/suggestions");
+      const data = await callAiApi("post", "/suggestions");
       setItems(data.suggestions || []);
     } catch (e) {
-      toast.error("Suggestion failed", { description: e.response?.data?.detail || e.message });
+      toast.error("Suggestion failed", { description: e.message });
     } finally {
       setLoading(false);
     }

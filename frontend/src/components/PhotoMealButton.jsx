@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
-import { api } from "../lib/api";
 import { toast } from "sonner";
 import { Camera, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
+import { callAiApi } from "../lib/aiClient";
 
 async function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -31,14 +31,14 @@ export default function PhotoMealButton({ onMealCreated }) {
     setLoading(true);
     try {
       const image_base64 = await fileToBase64(file);
-      const { data } = await api.post("/meals/photo", {
+      const data = await callAiApi("post", "/meals/photo", {
         image_base64,
         mime_type: file.type || "image/jpeg",
       });
       toast.success("Meal analyzed", { description: data.summary });
       onMealCreated?.(data);
     } catch (err) {
-      toast.error("Couldn't read that photo", { description: err.response?.data?.detail || err.message });
+      toast.error("Couldn't read that photo", { description: err.message });
     } finally {
       setLoading(false);
       if (inputRef.current) inputRef.current.value = "";
