@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Send, Loader2, Sparkles } from "lucide-react";
 import { Textarea } from "./ui/textarea";
 import { Button } from "./ui/button";
+import PhotoMealButton from "./PhotoMealButton";
 
 const EXAMPLES = [
   "2 scrambled eggs and a slice of whole wheat toast",
@@ -69,7 +70,8 @@ export default function MealChat({ onMealCreated }) {
         ))}
       </div>
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <PhotoMealButton onMealCreated={onMealCreated} />
         <Button
           onClick={submit}
           disabled={loading || !text.trim()}

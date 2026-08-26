@@ -14,7 +14,7 @@ import re
 import logging
 import httpx
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -44,6 +44,12 @@ class User(BaseModel):
 
 class MealCreate(BaseModel):
     description: str
+
+
+class MealPhoto(BaseModel):
+    image_base64: str
+    mime_type: str = "image/jpeg"
+    hint: Optional[str] = None
 
 
 class Nutrients(BaseModel):
@@ -210,6 +216,28 @@ async def analyze_meal_with_ai(description: str) -> dict:
     return _extract_json(resp)
 
 
+PHOTO_SYSTEM = MEAL_SYSTEM + """
+
+You are analyzing a PHOTO of a meal. First identify the visible dishes and portions, then estimate nutrition. Include a short "description" field (max 12 words) naming what you see, in place of user text. Return only the JSON object described above, plus a top-level "description" string field.
+"""
+
+
+async def analyze_photo_with_ai(image_b64: str, mime_type: str, hint: Optional[str]) -> dict:
+    prompt = "Analyze this meal photo and return the JSON."
+    if hint:
+        prompt += f" User hint: {hint}"
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"photo_{uuid.uuid4().hex[:10]}",
+        system_message=PHOTO_SYSTEM,
+    ).with_model("gemini", "gemini-2.5-flash-image")
+    resp = await chat.send_message(UserMessage(
+        text=prompt,
+        file_contents=[ImageContent(image_base64=image_b64)],
+    ))
+    return _extract_json(resp)
+
+
 # ---------- Meals ----------
 @api.post("/meals")
 async def create_meal(payload: MealCreate, request: Request):
@@ -256,6 +284,51 @@ async def delete_meal(meal_id: str, request: Request):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Meal not found")
     return {"ok": True}
+
+
+@api.post("/meals/photo")
+async def create_meal_from_photo(payload: MealPhoto, request: Request):
+    user = await get_current_user(request)
+    if not payload.image_base64.strip():
+        raise HTTPException(status_code=400, detail="image_base64 required")
+
+    # strip data URL prefix if present
+    b64 = payload.image_base64
+    if b64.startswith("data:"):
+        b64 = b64.split(",", 1)[-1]
+
+    mt = (payload.mime_type or "").lower()
+    if mt not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=400, detail="mime_type must be image/jpeg, image/png, or image/webp")
+    # rough size cap ~8MB after base64 (~10MB encoded)
+    if len(b64) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="image too large (max ~8MB)")
+
+    try:
+        parsed = await analyze_photo_with_ai(b64, payload.mime_type, payload.hint)
+    except Exception as e:
+        log.exception("photo AI failed")
+        raise HTTPException(status_code=502, detail=f"AI photo analysis failed: {e}")
+
+    nutrients = Nutrients(**parsed.get("nutrients", {})).model_dump()
+    description = (parsed.get("description") or payload.hint or "Meal photo").strip()
+    meal_id = f"meal_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    doc = {
+        "id": meal_id,
+        "user_id": user.user_id,
+        "description": description,
+        "items": parsed.get("items", []),
+        "nutrients": nutrients,
+        "summary": parsed.get("summary", ""),
+        "healthiness_score": int(parsed.get("healthiness_score", 0)),
+        "tags": parsed.get("tags", []) + ["photo"],
+        "source": "photo",
+        "created_at": now.isoformat(),
+    }
+    await db.meals.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
 
 
 # ---------- Goals ----------
@@ -307,6 +380,94 @@ async def _summary_for(user_id: str) -> dict:
 async def nutrition_summary(request: Request):
     user = await get_current_user(request)
     return await _summary_for(user.user_id)
+
+
+# ---------- Weekly trends ----------
+@api.get("/trends/weekly")
+async def weekly_trends(request: Request):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc)
+    today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    start = today - timedelta(days=6)
+    cursor = db.meals.find(
+        {"user_id": user.user_id, "created_at": {"$gte": start.isoformat()}},
+        {"_id": 0, "created_at": 1, "nutrients": 1},
+    )
+    meals = await cursor.to_list(length=2000)
+
+    days = []
+    for i in range(7):
+        d = start + timedelta(days=i)
+        days.append({
+            "date": d.date().isoformat(),
+            "label": d.strftime("%a"),
+            "calories": 0.0, "protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0,
+        })
+    idx_by_date = {d["date"]: d for d in days}
+
+    for m in meals:
+        try:
+            d = datetime.fromisoformat(m["created_at"]).astimezone(timezone.utc).date().isoformat()
+        except Exception:
+            continue
+        bucket = idx_by_date.get(d)
+        if not bucket:
+            continue
+        n = m.get("nutrients", {})
+        bucket["calories"] += float(n.get("calories", 0) or 0)
+        bucket["protein_g"] += float(n.get("protein_g", 0) or 0)
+        bucket["carbs_g"] += float(n.get("carbs_g", 0) or 0)
+        bucket["fat_g"] += float(n.get("fat_g", 0) or 0)
+
+    goals_doc = await db.goals.find_one({"user_id": user.user_id}, {"_id": 0}) or Goals().model_dump()
+    goals = {k: goals_doc.get(k, Goals().model_dump()[k]) for k in ("calories", "protein_g", "carbs_g", "fat_g")}
+    return {"days": days, "goals": goals}
+
+
+# ---------- Streak (protein goal streak) ----------
+@api.get("/streak")
+async def protein_streak(request: Request):
+    user = await get_current_user(request)
+    goals_doc = await db.goals.find_one({"user_id": user.user_id}, {"_id": 0}) or Goals().model_dump()
+    protein_goal = float(goals_doc.get("protein_g", Goals().protein_g))
+
+    now = datetime.now(timezone.utc)
+    today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    lookback = today - timedelta(days=30)
+
+    cursor = db.meals.find(
+        {"user_id": user.user_id, "created_at": {"$gte": lookback.isoformat()}},
+        {"_id": 0, "created_at": 1, "nutrients": 1},
+    )
+    meals = await cursor.to_list(length=5000)
+
+    per_day = {}
+    for m in meals:
+        try:
+            d = datetime.fromisoformat(m["created_at"]).astimezone(timezone.utc).date().isoformat()
+        except Exception:
+            continue
+        per_day[d] = per_day.get(d, 0.0) + float(m.get("nutrients", {}).get("protein_g", 0) or 0)
+
+    streak = 0
+    # start from today; if today not hit yet, look from yesterday (grace)
+    todays_protein = per_day.get(today.date().isoformat(), 0.0)
+    start_offset = 0 if todays_protein >= protein_goal else 1
+    for i in range(start_offset, 30):
+        day_key = (today - timedelta(days=i)).date().isoformat()
+        if per_day.get(day_key, 0.0) >= protein_goal:
+            streak += 1
+        else:
+            break
+
+    hit_today = todays_protein >= protein_goal
+    return {
+        "streak": streak,
+        "hit_today": hit_today,
+        "todays_protein": todays_protein,
+        "protein_goal": protein_goal,
+        "milestone": streak >= 3 and hit_today,
+    }
 
 
 # ---------- AI suggestions ----------

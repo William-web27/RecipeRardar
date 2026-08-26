@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 2 full test of PlateSense's three new features (protein Streak Rewards, Gemini Nano Banana photo meals, Weekly Trends) plus regression of existing endpoints/UI. Backend: 20/20 pytest tests passed (streak math incl. break + custom goal, weekly-trends shape/order/bucketing/window exclusion, photo endpoint contract + 400/401 validation, goals, text meal CRUD, summary, suggestions, auth 401s). Frontend: dashboard loads with session cookie, streak-banner shows seeded 4-day streak with milestone confetti, weekly-trends renders a 7-point recharts chart (7 x-axis ticks, 14 line dots), photo-upload-btn opens the native file chooser and a real JPEG upload completed end-to-end producing a meal tagged 'photo' in history; text meal-analyze regression works and rings/history update. Mobile 390px layout verified with no horizontal overflow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/streak", "issue": "Grace-day rule is undocumented in the response: when today's protein goal is not yet met, the streak is computed from yesterday, so a client can receive streak>=3 with hit_today=false. milestone correctly requires hit_today, but the semantics of 'streak' differ from 'consecutive days including today' — worth documenting/asserting intentional."},
+      {"endpoint": "POST /api/meals/photo", "issue": "No server-side validation of mime_type or decoded image size/format; an arbitrary non-image base64 string is forwarded to the LLM and surfaces as a generic 502. Suggest validating mime_type in {image/jpeg,image/png,image/webp} and max payload size (frontend validates, backend does not)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard / WeeklyTrends", "issues": ["Recharts console warning on mount: 'The width(-1) and height(-1) of chart should be greater than 0' (ResponsiveContainer measured before layout). Harmless but noisy; add minWidth={0}/minHeight to ResponsiveContainer.", "During the mount animation the Calories/Protein lines briefly render with detached dots for the last 2 days; settles correctly after animation (cosmetic)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/iteration2.xml"
+  ],
+  "action_items": [
+    "Optional: add mime_type/size validation to POST /api/meals/photo instead of relying on frontend-only checks.",
+    "Optional: silence the recharts width/height(-1) mount warning in WeeklyTrends.",
+    "No blocking defects found — all three new features work end to end."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~520 lines and mixes auth, LLM prompts, meals, goals, trends and streak — consider splitting into routers/services before it grows further.",
+    "created_at is stored as an ISO string and queried with string $gte comparisons; correct for UTC ISO but fragile if any writer ever stores a datetime or a non-UTC offset (streak/trends buckets would silently drop meals). Consider storing BSON dates.",
+    "Streak lookback is a hardcoded 30-day window (magic number) inside the handler; extract as a constant.",
+    "analyze_photo_with_ai receives mime_type but never uses it when building ImageContent — dead parameter."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py", "/app/backend/tests/conftest.py"],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "pytest creates/deletes isolated TEST_user_* users + sessions per test (auto cleanup). For UI testing a persistent user remains: test_database.users user_id='TEST_fe_user' (Fiona Tester) with session_token 'TEST_fe_session_token_1' and 4 seeded 130g-protein meals (ids meal_TEST_fe_0..3) plus 2 AI-created meals (text + photo). Delete with db.{users,user_sessions,meals,goals}.deleteMany({user_id:'TEST_fe_user'}).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Cookie/Bearer session_token = TEST_fe_session_token_1 (user_id TEST_fe_user). Emergent Google OAuth otherwise; no passwords.",
+  "context_for_next_testing_agent": "Run backend suite with: cd /app/backend && python -m pytest tests/ -v (pytest.ini forces -n 2 --dist loadscope; conftest.py provides mongo/fresh_user/session_user fixtures and insert_meal helper for seeding day-bucketed meals). Photo endpoint responds in ~5-10s and works reliably (no 502s seen in 3 calls). NOTE: the container has no external internet egress for image downloads (wikimedia curl returned an error page), so a PIL-generated JPEG at /tmp/lunch.jpg is used; Gemini correctly identified it as 'Abstract shapes, not identifiable as food' and returned zero nutrients — this proves vision works but nonzero nutrient estimation from a genuine food photo remains unverified end-to-end.",
+  "rca_of_the_issue": "N/A — no failures. Console 401 on first load is the expected pre-cookie /api/auth/me check on /login; ERR_CONNECTION_CLOSED entries are CRA dev-server websocket/HMR noise and do not affect functionality."
+}

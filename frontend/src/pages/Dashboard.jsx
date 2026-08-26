@@ -8,6 +8,8 @@ import MealHistory from "../components/MealHistory";
 import NutritionRings from "../components/NutritionRings";
 import GoalsDialog from "../components/GoalsDialog";
 import SuggestionsCard from "../components/SuggestionsCard";
+import StreakBanner from "../components/StreakBanner";
+import WeeklyTrends from "../components/WeeklyTrends";
 
 export default function Dashboard() {
   const { user, loading } = useAuth();
@@ -15,6 +17,8 @@ export default function Dashboard() {
   const [meals, setMeals] = useState([]);
   const [summary, setSummary] = useState(null);
   const [goals, setGoals] = useState(null);
+  const [streak, setStreak] = useState(null);
+  const [trends, setTrends] = useState(null);
 
   useEffect(() => {
     if (!loading && !user) navigate("/login", { replace: true });
@@ -22,14 +26,18 @@ export default function Dashboard() {
 
   const refresh = useCallback(async () => {
     try {
-      const [m, s, g] = await Promise.all([
+      const [m, s, g, st, tr] = await Promise.all([
         api.get("/meals"),
         api.get("/nutrition/summary"),
         api.get("/goals"),
+        api.get("/streak"),
+        api.get("/trends/weekly"),
       ]);
       setMeals(m.data);
       setSummary(s.data);
       setGoals(g.data);
+      setStreak(st.data);
+      setTrends(tr.data);
     } catch (e) {
       console.error(e);
     }
@@ -81,6 +89,15 @@ export default function Dashboard() {
             <NutritionRings summary={summary} />
           </section>
 
+          <div className="grid md:grid-cols-2 gap-4 mb-6">
+            <StreakBanner streak={streak} />
+            <SuggestionsCard />
+          </div>
+
+          <div className="mb-6">
+            <WeeklyTrends trends={trends} />
+          </div>
+
           <div className="grid lg:grid-cols-12 gap-6">
             <div className="lg:col-span-7 space-y-6">
               <MealChat onMealCreated={refresh} />
@@ -90,7 +107,6 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="lg:col-span-5 space-y-6">
-              <SuggestionsCard />
               {meals.length > todaysMeals.length && (
                 <div>
                   <div className="font-display text-xl font-semibold mb-3">Earlier</div>
