@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
+import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import AppNav from "../components/AppNav";
 import MealChat from "../components/MealChat";
@@ -12,6 +13,12 @@ import StreakBanner from "../components/StreakBanner";
 import WeeklyTrends from "../components/WeeklyTrends";
 import FavoritesBar from "../components/FavoritesBar";
 
+function msUntilNextLocalMidnight() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 2, 0); // +2s buffer
+  return next.getTime() - now.getTime();
+}
+
 export default function Dashboard() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
@@ -21,6 +28,7 @@ export default function Dashboard() {
   const [streak, setStreak] = useState(null);
   const [trends, setTrends] = useState(null);
   const [favorites, setFavorites] = useState([]);
+  const midnightTimerRef = useRef(null);
 
   useEffect(() => {
     if (!loading && !user) navigate("/login", { replace: true });
@@ -28,12 +36,14 @@ export default function Dashboard() {
 
   const refresh = useCallback(async () => {
     try {
+      const tz = new Date().getTimezoneOffset(); // minutes to ADD to local to get UTC
+      const params = { params: { tz_offset: tz } };
       const [m, s, g, st, tr, fv] = await Promise.all([
         api.get("/meals"),
-        api.get("/nutrition/summary"),
+        api.get("/nutrition/summary", params),
         api.get("/goals"),
-        api.get("/streak"),
-        api.get("/trends/weekly"),
+        api.get("/streak", params),
+        api.get("/trends/weekly", params),
         api.get("/favorites"),
       ]);
       setMeals(m.data);
@@ -48,6 +58,21 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { if (user) refresh(); }, [user, refresh]);
+
+  // Auto-reset stats at local midnight
+  useEffect(() => {
+    if (!user) return;
+    const schedule = () => {
+      const ms = msUntilNextLocalMidnight();
+      midnightTimerRef.current = setTimeout(async () => {
+        await refresh();
+        toast.success("Fresh day!", { description: "Your rings just reset for a new day." });
+        schedule();
+      }, ms);
+    };
+    schedule();
+    return () => { if (midnightTimerRef.current) clearTimeout(midnightTimerRef.current); };
+  }, [user, refresh]);
 
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 

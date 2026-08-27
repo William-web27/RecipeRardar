@@ -1,5 +1,5 @@
 """RecipeRadar backend — meal nutrition analyzer with Emergent Google Auth + Claude Sonnet 5."""
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Query
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -448,11 +448,23 @@ async def update_goals(goals: Goals, request: Request):
 
 
 # ---------- Daily summary ----------
-async def _summary_for(user_id: str) -> dict:
-    now = datetime.now(timezone.utc)
-    day_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+def _local_day_start(tz_offset_minutes: int) -> datetime:
+    """Return the UTC datetime that corresponds to the start of 'today' in the caller's local timezone.
+
+    tz_offset_minutes matches JS's Date.getTimezoneOffset(): the number of minutes to ADD to local
+    time to get UTC. e.g. EDT = 240, IST = -330.
+    """
+    tz_offset_minutes = max(-14 * 60, min(14 * 60, int(tz_offset_minutes or 0)))
+    now_utc = datetime.now(timezone.utc)
+    local_now = now_utc - timedelta(minutes=tz_offset_minutes)
+    local_midnight = datetime(local_now.year, local_now.month, local_now.day)
+    return local_midnight + timedelta(minutes=tz_offset_minutes)  # back to UTC
+
+
+async def _summary_for(user_id: str, tz_offset: int = 0) -> dict:
+    day_start_utc = _local_day_start(tz_offset)
     cursor = db.meals.find(
-        {"user_id": user_id, "created_at": {"$gte": day_start.isoformat()}},
+        {"user_id": user_id, "created_at": {"$gte": day_start_utc.isoformat()}},
         {"_id": 0},
     )
     meals = await cursor.to_list(length=500)
@@ -469,44 +481,55 @@ async def _summary_for(user_id: str) -> dict:
         "carbs_g": max(0, goals["carbs_g"] - totals["carbs_g"]),
         "fat_g": max(0, goals["fat_g"] - totals["fat_g"]),
     }
-    return {"date": day_start.date().isoformat(), "totals": totals, "goals": goals, "remaining": remaining, "meal_count": len(meals)}
+    local_date = (day_start_utc + timedelta(minutes=-tz_offset)).date().isoformat()
+    return {"date": local_date, "totals": totals, "goals": goals, "remaining": remaining, "meal_count": len(meals)}
 
 
 @api.get("/nutrition/summary")
-async def nutrition_summary(request: Request):
+async def nutrition_summary(request: Request, tz_offset: int = Query(0, ge=-840, le=840)):
     user = await get_current_user(request)
-    return await _summary_for(user.user_id)
+    return await _summary_for(user.user_id, tz_offset)
 
 
 # ---------- Weekly trends ----------
+def _local_date_of(iso_created: str, tz_offset: int) -> Optional[str]:
+    try:
+        dt = datetime.fromisoformat(iso_created)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    local_dt = dt - timedelta(minutes=tz_offset)
+    return local_dt.date().isoformat()
+
+
 @api.get("/trends/weekly")
-async def weekly_trends(request: Request):
+async def weekly_trends(request: Request, tz_offset: int = Query(0, ge=-840, le=840)):
     user = await get_current_user(request)
-    now = datetime.now(timezone.utc)
-    today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
-    start = today - timedelta(days=6)
+    today_utc = _local_day_start(tz_offset)  # UTC ts of user's local midnight today
+    # user's local "today date"
+    today_local_date = (today_utc - timedelta(minutes=tz_offset)).date()
+    start_utc = today_utc - timedelta(days=6)
+
     cursor = db.meals.find(
-        {"user_id": user.user_id, "created_at": {"$gte": start.isoformat()}},
+        {"user_id": user.user_id, "created_at": {"$gte": start_utc.isoformat()}},
         {"_id": 0, "created_at": 1, "nutrients": 1},
     )
     meals = await cursor.to_list(length=2000)
 
     days = []
     for i in range(7):
-        d = start + timedelta(days=i)
+        d = today_local_date - timedelta(days=6 - i)
         days.append({
-            "date": d.date().isoformat(),
+            "date": d.isoformat(),
             "label": d.strftime("%a"),
             "calories": 0.0, "protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0,
         })
     idx_by_date = {d["date"]: d for d in days}
 
     for m in meals:
-        try:
-            d = datetime.fromisoformat(m["created_at"]).astimezone(timezone.utc).date().isoformat()
-        except Exception:
-            continue
-        bucket = idx_by_date.get(d)
+        d = _local_date_of(m["created_at"], tz_offset)
+        bucket = idx_by_date.get(d) if d else None
         if not bucket:
             continue
         n = m.get("nutrients", {})
@@ -522,35 +545,33 @@ async def weekly_trends(request: Request):
 
 # ---------- Streak (protein goal streak) ----------
 @api.get("/streak")
-async def protein_streak(request: Request):
+async def protein_streak(request: Request, tz_offset: int = Query(0, ge=-840, le=840)):
     user = await get_current_user(request)
     goals_doc = await db.goals.find_one({"user_id": user.user_id}, {"_id": 0}) or Goals().model_dump()
     protein_goal = float(goals_doc.get("protein_g", Goals().protein_g))
 
-    now = datetime.now(timezone.utc)
-    today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
-    lookback = today - timedelta(days=30)
+    today_utc = _local_day_start(tz_offset)
+    today_local_date = (today_utc - timedelta(minutes=tz_offset)).date()
+    lookback_utc = today_utc - timedelta(days=30)
 
     cursor = db.meals.find(
-        {"user_id": user.user_id, "created_at": {"$gte": lookback.isoformat()}},
+        {"user_id": user.user_id, "created_at": {"$gte": lookback_utc.isoformat()}},
         {"_id": 0, "created_at": 1, "nutrients": 1},
     )
     meals = await cursor.to_list(length=5000)
 
     per_day = {}
     for m in meals:
-        try:
-            d = datetime.fromisoformat(m["created_at"]).astimezone(timezone.utc).date().isoformat()
-        except Exception:
+        d = _local_date_of(m["created_at"], tz_offset)
+        if not d:
             continue
         per_day[d] = per_day.get(d, 0.0) + float(m.get("nutrients", {}).get("protein_g", 0) or 0)
 
     streak = 0
-    # start from today; if today not hit yet, look from yesterday (grace)
-    todays_protein = per_day.get(today.date().isoformat(), 0.0)
+    todays_protein = per_day.get(today_local_date.isoformat(), 0.0)
     start_offset = 0 if todays_protein >= protein_goal else 1
     for i in range(start_offset, 30):
-        day_key = (today - timedelta(days=i)).date().isoformat()
+        day_key = (today_local_date - timedelta(days=i)).isoformat()
         if per_day.get(day_key, 0.0) >= protein_goal:
             streak += 1
         else:
@@ -578,9 +599,9 @@ No markdown fences, no extra prose."""
 
 
 @api.post("/suggestions")
-async def suggestions(request: Request):
+async def suggestions(request: Request, tz_offset: int = Query(0, ge=-840, le=840)):
     user = await get_current_user(request)
-    summary = await _summary_for(user.user_id)
+    summary = await _summary_for(user.user_id, tz_offset)
     remaining = summary["remaining"]
     prompt = (
         f"Remaining today: {int(remaining['calories'])} kcal, "

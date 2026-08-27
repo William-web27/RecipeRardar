@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 6 focused on the 'daily reset at local midnight' feature (tz_offset on daily endpoints + Dashboard midnight timer). Added new pytest module /app/backend/tests/test_timezone_reset.py (20 tests) covering summary/streak/trends/suggestions with tz_offset=0/240/-330/60/-720, UTC-midnight boundary bucketing, default (absent) tz_offset regression, auth and 422 validation. Full suite run: 78 tests, 77 passed, 1 failed (extreme tz_offset clamping inconsistency). Frontend verified in browser with seeded session TEST_fe_session_token_1: dashboard loads, tz_offset= is present on /api/nutrition/summary, /api/streak, /api/trends/weekly; midnight timer is armed (delay 16,074,278 ms ~4.47h, matches next local midnight +2s); by monkey-patching window.setTimeout to fast-forward long timers I confirmed the rollover actually fires refresh() AND shows the 'Fresh day!' toast, and the re-render is idempotent (rings/meal count unchanged). Also simulated an IST browser (getTimezoneOffset=-330): all 3 daily calls carry tz_offset=-330 and backend returns date 2026-08-28 (correct IST date at 19:32Z) with streak recomputed on IST day buckets (verified manually: streak 0 under IST vs 4 under UTC is mathematically correct for the seeded meals).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/nutrition/summary?tz_offset=100000", "issue": "tz_offset is clamped to +/-840 min inside _local_day_start(), but the returned 'date' (server.py:484) and the trends/streak local-day keys (lines 511, 554) are computed from the RAW unclamped tz_offset. With tz_offset=100000 the query window is today's UTC-clamped window but 'date' returns 2026-06-19 (69 days off). Fix: clamp once in a helper and reuse the clamped value everywhere. Real browsers never send >840, so impact is low, but the API contract is inconsistent for hostile/buggy clients."},
+      {"endpoint": "internal _local_day_start()", "issue": "Returns a NAIVE datetime; its .isoformat() (no '+00:00') is string-compared against created_at values stored in two different formats ('...Z' from seeds and '...+00:00' from the app). Lexicographic ordering happens to be correct today, but this is fragile — prefer tz-aware UTC and a single canonical created_at format."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Dashboard initial load", "issue": "refresh() runs twice on mount (React StrictMode double-invoke), so each daily endpoint is called 2x per load (observed 2 summary/streak/trends requests per page load, 6 with the IST run). Harmless but doubles API load; consider a guard/AbortController.", "affected_selectors": ["[data-testid=\"dashboard\"]"]}
+    ],
+    "design_issues": [
+      {"screen": "Dashboard / WeeklyTrends", "issues": ["Console warning from recharts on first paint: 'The width(-1) and height(-1) of chart should be greater than 0' — ResponsiveContainer mounts with zero-size parent; add minWidth/minHeight to silence and avoid a flash of unsized chart."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_timezone_reset.py",
+    "/app/test_reports/pytest/iteration6_tz.xml",
+    "/app/test_reports/pytest/iteration6_full.xml"
+  ],
+  "action_items": [
+    "Use the clamped tz_offset (not the raw query value) when computing 'date' in _summary_for and the local-day keys in /trends/weekly and /streak, or validate the param with Query(ge=-840, le=840) so out-of-range input returns 422 instead of a wrong date.",
+    "Optional: make _local_day_start return a timezone-aware UTC datetime and normalize created_at storage format.",
+    "Optional: avoid the duplicated mount refresh (StrictMode double fetch of the 3 daily endpoints)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:457 clamps tz_offset locally inside _local_day_start but callers reuse the unclamped parameter for date labelling — single source of truth needed.",
+    "Dashboard.jsx midnight timer implementation is correct: it re-schedules itself after firing and clears on unmount; msUntilNextLocalMidnight() verified to return a value inside (0, 24h+2s]."
+  ],
+  "updated_files": ["/app/backend/tests/test_timezone_reset.py"],
+  "success_rate": {"backend": "98% (77/78)", "frontend": "100% of tz/midnight-reset checks passed"},
+  "seed_data_creation": "Upserted user_id 'TEST_fe_user' + session_token 'TEST_fe_session_token_1' (7-day expiry) in test_database. Per-test users (TEST_user_*) are created and cleaned up by conftest fixtures; all tz test meals were inserted under those disposable users.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Bearer TEST_fe_session_token_1 / cookie session_token=TEST_fe_session_token_1 (user TEST_fe_user)",
+  "context_for_next_testing_agent": "tz behaviour is covered by /app/backend/tests/test_timezone_reset.py; the only failing test (test_extreme_tz_offset_clamped) documents the unclamped-date bug — it should pass once tz_offset clamping/validation is unified. For frontend midnight-timer testing, use context.add_init_script to wrap window.setTimeout and fast-forward delays > 1h to ~3s; that reliably triggers the 'Fresh day!' toast + refresh. Browser in this env runs UTC, so override Date.prototype.getTimezoneOffset to simulate other zones.",
+  "rca_of_the_issue": "Clamping is applied to a local variable inside _local_day_start(), so the function's window is bounded while the caller-side date arithmetic (day_start_utc - tz_offset) still uses the raw parameter, producing a date that disagrees with the data window for |tz_offset| > 840."
+}
